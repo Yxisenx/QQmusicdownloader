@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import json
 import time
 import random
@@ -20,9 +21,7 @@ def song_download(mid,path):
     url1 = 'https://u.y.qq.com/cgi-bin/musicu.fcg?data=%s '%data   #vkey获取接口
     try:
         songinfo1 = json.loads(requests.get(url1).content)
-        vkey = songinfo1['req_0']['data']['midurlinfo'][0]['vkey']#QQ音乐有版权的歌曲可以直接获得vkey
-        if vkey=='':
-            vkey = songinfo1['req_0']['data']['testfile2g'][44:-15]#QQ音乐无版权的需要从试听链接中截取vkey
+        vkey = songinfo1['req_0']['data']['testfile2g'].split('=')[2].split('&')[0]
         fmid = songinfo1['req_0']['data']['midurlinfo'][0]['filename'][4:-4]
     except:
         return 0
@@ -37,6 +36,7 @@ def song_download(mid,path):
     #歌曲相关信息获取接口
     try:
         songinfo2 = json.loads(requests.get(url2).content)
+        #歌曲品质songinfo2['songinfo']['data']['track_info']['file']
         songname = songinfo2['songinfo']['data']['extras']['name']#歌曲名字
         singernum = len(songinfo2['songinfo']['data']['track_info']['singer'])
         if singernum == 1:                                      #歌手名字判断是否是独唱
@@ -102,9 +102,15 @@ def song_download(mid,path):
 #####通过api获取专辑中song_mid
     
 def album_parse(url):
-    api = 'https://c.y.qq.com/v8/fcg-bin/fcg_v8_album_info_cp.fcg?albummid=000QXjVc1r7NQO'
+    albumid = url[29:-5]
+    api = 'https://c.y.qq.com/v8/fcg-bin/fcg_v8_album_info_cp.fcg?albummid=%s'%albumid
     album = json.loads(requests.get(api).content)
-    print(album)
+    ret = {}
+    ret['song'] = []
+    for each in album['data']['list']:
+        ret['song'].append(each['songmid'])
+    return ret
+    
 
 
 def album_download(url,path):
@@ -133,7 +139,6 @@ def playlist_parse(url):
     api = 'https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?uin=0&format=json&inCharset=utf-8&outCharset=utf-8&notice=0&platform=h5&needNewCode=1&new_format=1&pic=500&disstid=%s&type=1&json=1&utf8=1&onlysong=0&picmid=1&nosign=1&song_begin=0&song_num=%s&_=%s'%(listid,song_num,nowtime)
     playlist = json.loads(requests.get(api, headers = header).content)
     ret = {}
-    ret['name'] = playlist['cdlist'][0]['dissname']
     ret['song'] = []
     for each in playlist['cdlist'][0]['songlist']:
         ret['song'].append(each['mid'])
@@ -158,10 +163,10 @@ def playlist_download(url,path):
 
 def config_load():
     try:
-        with open('config.json','r',encoding = 'utf-8') as f:
+        path = sys.path[0]+'/'
+        with open(path+'config.json','r',encoding = 'utf-8') as f:
             a = json.load(f)
-        return a
-        
+        return a  
     except:
         print('配置文件载入错误')
 
