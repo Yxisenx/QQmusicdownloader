@@ -7,8 +7,9 @@ from lxml import etree as le
 import time
 import random
 import os
+import threading
 
-
+s = []
 def album_parse(album_mid):
     try:
         api = 'https://c.y.qq.com/v8/fcg-bin/fcg_v8_album_info_cp.fcg?albummid=%s' % album_mid
@@ -18,12 +19,15 @@ def album_parse(album_mid):
             song_mid.append(each['songmid'])
         ret = {}
         ret['code'] = 1
+        threads = []
         ret['datas'] = []
         for each in song_mid:
-            try:
-                ret['datas'].append(song_parse(each))
-            except:
-                pass
+            thread = Music(each)
+            thread.start()
+            threads.append(thread)
+        for t in threads:
+            t.join()
+        ret['datas'] = s
         return ret
     except:
         return {'code': -1}
@@ -42,8 +46,14 @@ def playlist_parse(playlist_mid):
         ret = {}
         ret['code'] = 1
         ret['datas'] = []
+        threads = []
         for each in playlist['cdlist'][0]['songlist']:
-            ret['datas'].append(song_parse(each['mid']))
+            thread = Music(each['mid'])
+            thread.start()
+            threads.append(thread)
+        for t in threads:
+            t.join()
+        ret['datas'] = s
         return ret
     except:
         return {'code': -1}
@@ -77,7 +87,7 @@ def song_parse(song_mid):
             singer = songinfo2['songinfo']['data']['track_info']['singer'][0]['name']
             for i in range(1, singernum):
                 singer = singer + '&' + songinfo2['songinfo']['data']['track_info']['singer'][i]['name']
-        filename = songname + '-' + singer
+        filename = (songname + '-' + singer).replace('<', '').replace('>', '').replace(r'/', '').replace('\\', '').replace('|', '').replace(':', '').replace('"', '').replace('*', '').replace('?', '')
     except:
         return {'code': -1}
     quality = songinfo2['songinfo']['data']['track_info']['file']
@@ -97,6 +107,7 @@ def song_parse(song_mid):
         ret['link']['320mp3'] = 'http://streamoc.music.tc.qq.com/M800%s.mp3?guid=%s&vkey=%s&uin=0&fromtag=58' % (fmid, guid, vkey)
     if quality['size_128mp3'] is not 0:
         ret['link']['128mp3'] = 'http://streamoc.music.tc.qq.com/M500%s.mp3?guid=%s&vkey=%s&uin=0&fromtag=58' % (fmid, guid, vkey)
+    s.append(ret)
     return ret
 
 
@@ -121,6 +132,7 @@ def parse(url):
 
 def downloader(url, flag):
     song = json.loads(parse(url))
+    print(song)
     if song['code'] == -2:
         print('链接输入错误！')
         return 0
@@ -136,6 +148,8 @@ def downloader(url, flag):
     print(path)
     flag2 = ['flac', 'ape', '320mp3', '128mp3', 'm4a']
     i = flag2.index(flag)
+    threads = []
+    songs = {}
     for each in song['datas']:
         k = i
         while each['link'][flag2[k]] == 0:
@@ -152,15 +166,47 @@ def downloader(url, flag):
             else:
                 print('正在下载\t%s' % mpath.split('\\')[-1])
             murl = each['link'][flag2[k]]
+            thread = Download(mpath, murl)
+            thread.start()
+            threads.append(thread)
+            songs[thread] = mpath.split('\\')[-1]
+            '''
             try:
-                with open(mpath, 'wb') as f:
-                    f.write(requests.get(murl).content)
+                
                 print('%s\t下载成功'%mpath.split('\\')[-1])
             except:
                 print('%s\t下载失败' % mpath.split('\\')[-1])
+            '''
         except:
             pass
+    for t in threads:
+        t.join()
+        print('%s\t下载成功' % songs[t])
 
+
+def down(path, link):
+    with open(path, 'wb') as f:
+        f.write(requests.get(link).content)
+
+
+class Music(threading.Thread):
+    def __init__(self, mid):
+        threading.Thread.__init__(self)
+        self.mid = mid
+        self.song = song_parse
+
+    def run(self):
+        return self.song(self.mid)
+
+
+class Download(threading.Thread):
+    def __init__(self, path, link):
+        threading.Thread.__init__(self)
+        self.path = path
+        self.link = link
+
+    def run(self):
+        down(self.path, self.link)
 
 
 if __name__ == '__main__':
@@ -182,4 +228,3 @@ if __name__ == '__main__':
                 print('########\t音质选择有误\t##########')
                 continue
         print('Press Ctrl + C to exit.')
-    #downloader('https://y.qq.com/n/yqq/song/004MEvgU248YjJ.html', 'flac')
